@@ -6,6 +6,7 @@ RUN apk add --no-cache gcc musl-dev
 WORKDIR /app
 
 COPY go.mod go.sum ./
+RUN go env -w GOPROXY=https://goproxy.cn,direct
 RUN go mod download
 
 COPY . .
@@ -15,7 +16,8 @@ RUN CGO_ENABLED=1 go build -o server ./cmd/server
 # Runtime stage
 FROM alpine:3.19
 
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && apk add --no-cache gcc musl-dev
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories \
+    && apk add --no-cache gcc musl-dev
 
 WORKDIR /app
 
