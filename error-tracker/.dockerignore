@@ -1,0 +1,8 @@
+errors.db
+errors.db-shm
+errors.db-wal
+server
+.git
+.gitignore
+docker-compose.yml
+Dockerfile

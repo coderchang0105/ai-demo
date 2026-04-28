@@ -1,0 +1,47 @@
+package main
+
+import (
+	"log"
+	"os"
+
+	"github.com/gin-gonic/gin"
+
+	"error-tracker/internal/handler"
+	"error-tracker/internal/middleware"
+	"error-tracker/internal/store"
+)
+
+func main() {
+	dbPath := "./errors.db"
+	if v := os.Getenv("DB_PATH"); v != "" {
+		dbPath = v
+	}
+	db, err := store.NewSQLiteStore(dbPath)
+	if err != nil {
+		log.Fatalf("Failed to init database: %v", err)
+	}
+	defer db.Close()
+
+	h := handler.NewReportHandler(db)
+
+	r := gin.Default()
+	r.Use(middleware.CORS())
+
+	api := r.Group("/api/v1")
+	{
+		api.POST("/report", h.Report)
+		api.GET("/events", h.GetEvents)
+		api.GET("/stats", h.GetStats)
+		api.GET("/trend", h.GetTrend)
+	}
+
+	// serve SDK and example static files
+	r.Static("/sdk", "./web/sdk")
+	r.Static("/example", "./example")
+	r.Static("/dashboard", "./web/dashboard")
+
+	log.Println("Server starting on :8080")
+	if err := r.Run(":8080"); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}

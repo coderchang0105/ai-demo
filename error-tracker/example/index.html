@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Tracker - 测试页面</title>
+    <style>
+        body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; }
+        h1 { font-size: 1.4em; }
+        button { display: block; margin: 10px 0; padding: 10px 20px; cursor: pointer; font-size: 14px; }
+        .info { color: #666; font-size: 13px; margin-top: 20px; }
+        #log { margin-top: 20px; padding: 10px; background: #f5f5f5; font-size: 13px; max-height: 300px; overflow-y: auto; }
+        #log p { margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <h1>Error Tracker 测试页面</h1>
+    <p class="info">点击下面的按钮触发不同类型的错误，打开控制台和 Network 面板查看效果。</p>
+
+    <button onclick="triggerTypeError()">触发 TypeError</button>
+    <button onclick="triggerReferenceError()">触发 ReferenceError</button>
+    <button onclick="triggerPromiseRejection()">触发 Promise 未捕获异常</button>
+    <button onclick="triggerResourceError()">触发资源加载错误</button>
+    <button onclick="triggerManualCapture()">手动上报错误</button>
+
+    <div id="log"><p><b>日志：</b></p></div>
+
+    <script src="/sdk/tracker.js"></script>
+    <script>
+        ErrorTracker.init({
+            appId: 'demo',
+            reportUrl: 'http://localhost:8080/api/v1/report',
+            userId: 'test-user-001'
+        });
+
+        function log(msg) {
+            var p = document.createElement('p');
+            p.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+            document.getElementById('log').appendChild(p);
+        }
+
+        function triggerTypeError() {
+            log('触发 TypeError...');
+            var obj = null;
+            obj.foo();
+        }
+
+        function triggerReferenceError() {
+            log('触发 ReferenceError...');
+            undefinedVariable.method();
+        }
+
+        function triggerPromiseRejection() {
+            log('触发 Promise rejection...');
+            Promise.reject(new Error('Promise 异步错误'));
+        }
+
+        function triggerResourceError() {
+            log('触发资源加载错误...');
+            var img = document.createElement('img');
+            img.src = 'http://localhost:8080/nonexistent.png';
+            document.body.appendChild(img);
+        }
+
+        function triggerManualCapture() {
+            log('手动上报...');
+            try {
+                JSON.parse('{invalid json}');
+            } catch (e) {
+                ErrorTracker.captureError(e);
+                log('已手动上报: ' + e.message);
+            }
+        }
+    </script>
+</body>
+</html>

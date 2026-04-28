@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Tracker - Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: #333; }
+
+        /* Header */
+        .header { background: #fff; padding: 16px 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-between; }
+        .header h1 { font-size: 18px; font-weight: 600; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .header-right label { font-size: 13px; color: #666; }
+        .header-right input[type="text"] { padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; width: 140px; }
+        .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #666; cursor: pointer; }
+        .toggle input { cursor: pointer; }
+
+        /* Content */
+        .content { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+
+        /* Stats Cards */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .card .label { font-size: 13px; color: #888; margin-bottom: 8px; }
+        .card .value { font-size: 28px; font-weight: 700; }
+        .card.total .value { color: #1677ff; }
+        .card.js_error .value { color: #ff4d4f; }
+        .card.unhandled_rejection .value { color: #fa8c16; }
+        .card.resource_error .value { color: #722ed1; }
+        .card.http_error .value { color: #13c2c2; }
+
+        /* Chart */
+        .chart-container { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .chart-container h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+        canvas { width: 100%; height: 200px; }
+
+        /* Filter & Table */
+        .table-section { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+        .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .table-header h3 { font-size: 14px; font-weight: 600; }
+        .filter select { padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #f0f0f0; color: #888; font-weight: 500; }
+        td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+        tr.clickable { cursor: pointer; }
+        tr.clickable:hover { background: #fafafa; }
+        .type-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #fff; }
+        .type-tag.js_error { background: #ff4d4f; }
+        .type-tag.unhandled_rejection { background: #fa8c16; }
+        .type-tag.resource_error { background: #722ed1; }
+        .type-tag.http_error { background: #13c2c2; }
+        .msg-cell { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .time-cell { white-space: nowrap; color: #888; }
+
+        /* Pagination */
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; }
+        .pagination button { padding: 6px 12px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; cursor: pointer; font-size: 13px; }
+        .pagination button:disabled { color: #ccc; cursor: not-allowed; }
+        .pagination button.active { background: #1677ff; color: #fff; border-color: #1677ff; }
+        .pagination span { font-size: 13px; color: #888; }
+
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; justify-content: center; align-items: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 8px; padding: 24px; max-width: 720px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative; }
+        .modal h3 { font-size: 16px; margin-bottom: 16px; padding-right: 30px; }
+        .modal-close { position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 20px; cursor: pointer; color: #999; }
+        .detail-row { margin-bottom: 12px; }
+        .detail-row .dl { font-size: 12px; color: #888; margin-bottom: 4px; }
+        .detail-row .dv { font-size: 13px; word-break: break-all; }
+        .stack-pre { background: #f5f5f5; padding: 12px; border-radius: 4px; font-size: 12px; font-family: "SF Mono", Menlo, monospace; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+
+        .empty { text-align: center; padding: 40px; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Error Tracker Dashboard</h1>
+        <div class="header-right">
+            <label>App ID:</label>
+            <input type="text" id="appIdInput" value="demo" placeholder="输入 app_id">
+            <button onclick="loadAll()" style="padding:6px 14px;border:1px solid #1677ff;background:#1677ff;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;">查询</button>
+            <label class="toggle">
+                <input type="checkbox" id="autoRefresh" checked> 自动刷新 (10s)
+            </label>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="stats" id="statsContainer"></div>
+
+        <div class="chart-container">
+            <h3>错误趋势（最近 24 小时）</h3>
+            <canvas id="trendChart" height="200"></canvas>
+        </div>
+
+        <div class="table-section">
+            <div class="table-header">
+                <h3>错误列表 <span id="totalCount" style="font-weight:400;color:#888;font-size:13px;"></span></h3>
+                <div class="filter">
+                    <select id="typeFilter" onchange="currentPage=1;loadEvents()">
+                        <option value="">全部类型</option>
+                        <option value="js_error">js_error</option>
+                        <option value="unhandled_rejection">unhandled_rejection</option>
+                        <option value="resource_error">resource_error</option>
+                        <option value="http_error">http_error</option>
+                    </select>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:50px">ID</th>
+                        <th style="width:140px">类型</th>
+                        <th>错误信息</th>
+                        <th style="width:160px">时间</th>
+                    </tr>
+                </thead>
+                <tbody id="eventsBody"></tbody>
+            </table>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <h3 id="modalTitle">错误详情</h3>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+    var API_BASE = location.origin + '/api/v1';
+    var currentPage = 1;
+    var pageSize = 20;
+    var refreshTimer = null;
+
+    function getAppId() {
+        return document.getElementById('appIdInput').value.trim() || 'demo';
+    }
+
+    // ---- Stats ----
+    function loadStats() {
+        fetch(API_BASE + '/stats?app_id=' + encodeURIComponent(getAppId()))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var types = ['js_error', 'unhandled_rejection', 'resource_error', 'http_error'];
+                var labels = { js_error: 'JS 错误', unhandled_rejection: 'Promise 异常', resource_error: '资源错误', http_error: 'HTTP 错误' };
+                var html = '<div class="card total"><div class="label">总错误数</div><div class="value">' + (data.total || 0) + '</div></div>';
+                types.forEach(function(t) {
+                    var count = (data.by_type && data.by_type[t]) || 0;
+                    html += '<div class="card ' + t + '"><div class="label">' + labels[t] + '</div><div class="value">' + count + '</div></div>';
+                });
+                document.getElementById('statsContainer').innerHTML = html;
+            })
+            .catch(function() {
+                document.getElementById('statsContainer').innerHTML = '<div class="empty">加载统计失败</div>';
+            });
+    }
+
+    // ---- Trend Chart ----
+    function loadTrend() {
+        fetch(API_BASE + '/trend?app_id=' + encodeURIComponent(getAppId()) + '&hours=24')
+            .then(function(r) { return r.json(); })
+            .then(function(res) { drawChart(res.data || []); })
+            .catch(function() {});
+    }
+
+    function drawChart(buckets) {
+        var canvas = document.getElementById('trendChart');
+        var ctx = canvas.getContext('2d');
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        var w = rect.width, h = rect.height;
+        var pad = { top: 10, right: 20, bottom: 40, left: 50 };
+        var cw = w - pad.left - pad.right;
+        var ch = h - pad.top - pad.bottom;
+
+        ctx.clearRect(0, 0, w, h);
+
+        if (!buckets || buckets.length === 0) {
+            ctx.fillStyle = '#999';
+            ctx.font = '13px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据', w / 2, h / 2);
+            return;
+        }
+
+        var maxCount = Math.max.apply(null, buckets.map(function(b) { return b.count; }));
+        if (maxCount === 0) maxCount = 1;
+
+        // Grid lines
+        ctx.strokeStyle = '#f0f0f0';
+        ctx.lineWidth = 1;
+        for (var i = 0; i <= 4; i++) {
+            var y = pad.top + ch - (ch * i / 4);
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(pad.left + cw, y);
+            ctx.stroke();
+            ctx.fillStyle = '#999';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(Math.round(maxCount * i / 4), pad.left - 8, y + 4);
+        }
+
+        // Line
+        ctx.strokeStyle = '#1677ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        buckets.forEach(function(b, idx) {
+            var x = pad.left + (cw * idx / (buckets.length - 1 || 1));
+            var y = pad.top + ch - (ch * b.count / maxCount);
+            if (idx === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Fill area
+        ctx.lineTo(pad.left + cw, pad.top + ch);
+        ctx.lineTo(pad.left, pad.top + ch);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(22, 119, 255, 0.08)';
+        ctx.fill();
+
+        // Dots
+        ctx.fillStyle = '#1677ff';
+        buckets.forEach(function(b, idx) {
+            var x = pad.left + (cw * idx / (buckets.length - 1 || 1));
+            var y = pad.top + ch - (ch * b.count / maxCount);
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // X labels
+        ctx.fillStyle = '#999';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        var step = Math.max(1, Math.floor(buckets.length / 8));
+        buckets.forEach(function(b, idx) {
+            if (idx % step !== 0 && idx !== buckets.length - 1) return;
+            var x = pad.left + (cw * idx / (buckets.length - 1 || 1));
+            var label = b.hour.substring(11, 16); // HH:MM
+            ctx.fillText(label, x, pad.top + ch + 20);
+        });
+    }
+
+    // ---- Events List ----
+    function loadEvents() {
+        var typeFilter = document.getElementById('typeFilter').value;
+        var url = API_BASE + '/events?app_id=' + encodeURIComponent(getAppId()) + '&page=' + currentPage + '&size=' + pageSize;
+        if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
+
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                var events = res.data || [];
+                var total = res.total || 0;
+                document.getElementById('totalCount').textContent = '(共 ' + total + ' 条)';
+                renderTable(events);
+                renderPagination(total);
+            })
+            .catch(function() {
+                document.getElementById('eventsBody').innerHTML = '<tr><td colspan="4" class="empty">加载失败</td></tr>';
+            });
+    }
+
+    function renderTable(events) {
+        var tbody = document.getElementById('eventsBody');
+        if (!events.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
+            return;
+        }
+        var html = '';
+        events.forEach(function(e) {
+            var time = new Date(e.timestamp).toLocaleString('zh-CN');
+            html += '<tr class="clickable" onclick=\'showDetail(' + JSON.stringify(e).replace(/'/g, "\\'") + ')\'>'
+                + '<td>' + e.id + '</td>'
+                + '<td><span class="type-tag ' + e.type + '">' + e.type + '</span></td>'
+                + '<td class="msg-cell" title="' + escapeHtml(e.message) + '">' + escapeHtml(e.message) + '</td>'
+                + '<td class="time-cell">' + time + '</td>'
+                + '</tr>';
+        });
+        tbody.innerHTML = html;
+    }
+
+    function renderPagination(total) {
+        var totalPages = Math.ceil(total / pageSize) || 1;
+        var container = document.getElementById('pagination');
+        var html = '<button onclick="goPage(' + (currentPage - 1) + ')"' + (currentPage <= 1 ? ' disabled' : '') + '>&lt;</button>';
+        html += '<span>' + currentPage + ' / ' + totalPages + '</span>';
+        html += '<button onclick="goPage(' + (currentPage + 1) + ')"' + (currentPage >= totalPages ? ' disabled' : '') + '>&gt;</button>';
+        container.innerHTML = html;
+    }
+
+    function goPage(p) {
+        currentPage = p;
+        loadEvents();
+    }
+
+    // ---- Detail Modal ----
+    function showDetail(e) {
+        document.getElementById('modalTitle').textContent = '[' + e.type + '] ' + e.message;
+        var time = new Date(e.timestamp).toLocaleString('zh-CN');
+        var html = ''
+            + row('类型', '<span class="type-tag ' + e.type + '">' + e.type + '</span>')
+            + row('错误信息', escapeHtml(e.message))
+            + row('页面 URL', escapeHtml(e.url))
+            + row('用户 ID', escapeHtml(e.user_id || '-'))
+            + row('User-Agent', escapeHtml(e.user_agent || '-'))
+            + row('时间', time);
+        if (e.meta) {
+            try {
+                var meta = typeof e.meta === 'string' ? JSON.parse(e.meta) : e.meta;
+                html += row('附加信息', '<pre class="stack-pre">' + escapeHtml(JSON.stringify(meta, null, 2)) + '</pre>');
+            } catch(ex) {
+                html += row('附加信息', escapeHtml(e.meta));
+            }
+        }
+        if (e.stack) {
+            html += row('错误堆栈', '<pre class="stack-pre">' + escapeHtml(e.stack) + '</pre>');
+        }
+        document.getElementById('modalBody').innerHTML = html;
+        document.getElementById('modalOverlay').classList.add('active');
+    }
+
+    function row(label, value) {
+        return '<div class="detail-row"><div class="dl">' + label + '</div><div class="dv">' + value + '</div></div>';
+    }
+
+    function closeModal() {
+        document.getElementById('modalOverlay').classList.remove('active');
+    }
+
+    // ---- Utils ----
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ---- Auto Refresh ----
+    function setupAutoRefresh() {
+        var cb = document.getElementById('autoRefresh');
+        function toggle() {
+            if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+            if (cb.checked) {
+                refreshTimer = setInterval(loadAll, 10000);
+            }
+        }
+        cb.addEventListener('change', toggle);
+        toggle();
+    }
+
+    // ---- Load All ----
+    function loadAll() {
+        loadStats();
+        loadTrend();
+        loadEvents();
+    }
+
+    // ---- Keyboard ----
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Enter' && e.target.id === 'appIdInput') { currentPage = 1; loadAll(); }
+    });
+
+    // ---- Init ----
+    loadAll();
+    setupAutoRefresh();
+    window.addEventListener('resize', loadTrend);
+    </script>
+</body>
+</html>
