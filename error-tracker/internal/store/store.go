@@ -10,7 +10,7 @@ type TimeBucket struct {
 type Store interface {
 	SaveEvent(event *model.ErrorEvent) error
 	SaveEvents(events []*model.ErrorEvent) error
-	QueryEvents(appID, errorType string, page, size int) ([]*model.ErrorEvent, int64, error)
+	QueryEvents(appID, errorType, userID string, page, size int) ([]*model.ErrorEvent, int64, error)
 	GetEventStats(appID string) (*model.EventStats, error)
 	GetTimeTrend(appID string, hours int) ([]*TimeBucket, error)
 	Close() error

@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-server
+/server
 
 # Database
 *.db
@@ -27,3 +27,4 @@ vendor/
 # Environment
 .env
 .env.*
+

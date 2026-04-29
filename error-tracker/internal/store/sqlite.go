@@ -100,7 +100,7 @@ func (s *SQLiteStore) SaveEvents(events []*model.ErrorEvent) error {
 	return tx.Commit()
 }
 
-func (s *SQLiteStore) QueryEvents(appID, errorType string, page, size int) ([]*model.ErrorEvent, int64, error) {
+func (s *SQLiteStore) QueryEvents(appID, errorType, userID string, page, size int) ([]*model.ErrorEvent, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -112,15 +112,26 @@ func (s *SQLiteStore) QueryEvents(appID, errorType string, page, size int) ([]*m
 	var total int64
 	var args []any
 
-	countSQL := "SELECT COUNT(*) FROM error_events WHERE app_id = ?"
+	countSQL := "SELECT COUNT(*) FROM error_events WHERE 1=1"
 	querySQL := `SELECT id, app_id, type, message, stack, url, user_agent, user_id, meta, timestamp, created_at
-		 FROM error_events WHERE app_id = ?`
-	args = append(args, appID)
+		 FROM error_events WHERE 1=1`
+
+	if appID != "" {
+		countSQL += " AND app_id = ?"
+		querySQL += " AND app_id = ?"
+		args = append(args, appID)
+	}
 
 	if errorType != "" {
 		countSQL += " AND type = ?"
 		querySQL += " AND type = ?"
 		args = append(args, errorType)
+	}
+
+	if userID != "" {
+		countSQL += " AND user_id LIKE ?"
+		querySQL += " AND user_id LIKE ?"
+		args = append(args, "%"+userID+"%")
 	}
 
 	err := s.db.QueryRow(countSQL, args...).Scan(&total)
@@ -157,15 +168,20 @@ func (s *SQLiteStore) GetTimeTrend(appID string, hours int) ([]*TimeBucket, erro
 	}
 	sinceMs := time.Now().Add(-time.Duration(hours) * time.Hour).UnixMilli()
 
-	rows, err := s.db.Query(
-		`SELECT strftime('%Y-%m-%d %H:00', created_at/1000, 'unixepoch', 'localtime') AS hour,
+	query := `SELECT strftime('%Y-%m-%d %H:00', created_at/1000, 'unixepoch', 'localtime') AS hour,
 		        COUNT(*) AS count
 		 FROM error_events
-		 WHERE app_id = ? AND created_at >= ?
-		 GROUP BY hour
-		 ORDER BY hour ASC`,
-		appID, sinceMs,
-	)
+		 WHERE created_at >= ?`
+	args := []any{sinceMs}
+
+	if appID != "" {
+		query += " AND app_id = ?"
+		args = append(args, appID)
+	}
+
+	query += " GROUP BY hour ORDER BY hour ASC"
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -188,14 +204,23 @@ func (s *SQLiteStore) GetEventStats(appID string) (*model.EventStats, error) {
 		ByType: make(map[string]int64),
 	}
 
-	err := s.db.QueryRow("SELECT COUNT(*) FROM error_events WHERE app_id = ?", appID).Scan(&stats.Total)
+	countSQL := "SELECT COUNT(*) FROM error_events"
+	typeSQL := "SELECT type, COUNT(*) FROM error_events"
+	var args []any
+
+	if appID != "" {
+		countSQL += " WHERE app_id = ?"
+		typeSQL += " WHERE app_id = ?"
+		args = append(args, appID)
+	}
+
+	err := s.db.QueryRow(countSQL, args...).Scan(&stats.Total)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.db.Query(
-		"SELECT type, COUNT(*) FROM error_events WHERE app_id = ? GROUP BY type", appID,
-	)
+	typeSQL += " GROUP BY type"
+	rows, err := s.db.Query(typeSQL, args...)
 	if err != nil {
 		return nil, err
 	}
