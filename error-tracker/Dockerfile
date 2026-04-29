@@ -1,8 +1,6 @@
 # Build stage
 FROM golang:1.26.2-alpine AS builder
 
-RUN apk add --no-cache gcc musl-dev
-
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -17,7 +15,7 @@ RUN CGO_ENABLED=1 go build -o server ./cmd/server
 FROM alpine:3.19
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories \
-    && apk add --no-cache gcc musl-dev
+    && apk add gcc musl-dev
 
 WORKDIR /app
 
