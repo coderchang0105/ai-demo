@@ -47,7 +47,7 @@
         td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
         tr.clickable { cursor: pointer; }
         tr.clickable:hover { background: #fafafa; }
-        .type-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #fff; }
+        .type-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; color: #fff; background: #8c8c8c; }
         .type-tag.js_error { background: #ff4d4f; }
         .type-tag.unhandled_rejection { background: #fa8c16; }
         .type-tag.resource_error { background: #722ed1; }
@@ -81,7 +81,7 @@
         <h1>Error Tracker Dashboard</h1>
         <div class="header-right">
             <label>App ID:</label>
-            <input type="text" id="appIdInput" value="demo" placeholder="输入 app_id">
+            <input type="text" id="appIdInput" value="" placeholder="留空查看全部">
             <button onclick="loadAll()" style="padding:6px 14px;border:1px solid #1677ff;background:#1677ff;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;">查询</button>
             <label class="toggle">
                 <input type="checkbox" id="autoRefresh" checked> 自动刷新 (10s)
@@ -101,6 +101,7 @@
             <div class="table-header">
                 <h3>错误列表 <span id="totalCount" style="font-weight:400;color:#888;font-size:13px;"></span></h3>
                 <div class="filter">
+                    <input type="text" id="userIdFilter" placeholder="搜索用户ID" oninput="currentPage=1;loadEvents()" style="padding:6px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;width:140px;margin-right:8px;">
                     <select id="typeFilter" onchange="currentPage=1;loadEvents()">
                         <option value="">全部类型</option>
                         <option value="js_error">js_error</option>
@@ -116,6 +117,7 @@
                         <th style="width:50px">ID</th>
                         <th style="width:140px">类型</th>
                         <th>错误信息</th>
+                        <th style="width:120px">用户ID</th>
                         <th style="width:160px">时间</th>
                     </tr>
                 </thead>
@@ -141,12 +143,19 @@
     var refreshTimer = null;
 
     function getAppId() {
-        return document.getElementById('appIdInput').value.trim() || 'demo';
+        return document.getElementById('appIdInput').value.trim();
+    }
+
+    function buildQuery(params) {
+        var appId = getAppId();
+        if (appId) params.app_id = appId;
+        var qs = Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
+        return qs ? '?' + qs : '';
     }
 
     // ---- Stats ----
     function loadStats() {
-        fetch(API_BASE + '/stats?app_id=' + encodeURIComponent(getAppId()))
+        fetch(API_BASE + '/stats' + buildQuery({}))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var types = ['js_error', 'unhandled_rejection', 'resource_error', 'http_error'];
@@ -165,7 +174,7 @@
 
     // ---- Trend Chart ----
     function loadTrend() {
-        fetch(API_BASE + '/trend?app_id=' + encodeURIComponent(getAppId()) + '&hours=24')
+        fetch(API_BASE + '/trend' + buildQuery({hours: 24}))
             .then(function(r) { return r.json(); })
             .then(function(res) { drawChart(res.data || []); })
             .catch(function() {});
@@ -258,8 +267,11 @@
     // ---- Events List ----
     function loadEvents() {
         var typeFilter = document.getElementById('typeFilter').value;
-        var url = API_BASE + '/events?app_id=' + encodeURIComponent(getAppId()) + '&page=' + currentPage + '&size=' + pageSize;
-        if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
+        var userIdFilter = document.getElementById('userIdFilter').value.trim();
+        var params = {page: currentPage, size: pageSize};
+        if (typeFilter) params.type = typeFilter;
+        if (userIdFilter) params.user_id = userIdFilter;
+        var url = API_BASE + '/events' + buildQuery(params);
 
         fetch(url)
             .then(function(r) { return r.json(); })
@@ -271,14 +283,14 @@
                 renderPagination(total);
             })
             .catch(function() {
-                document.getElementById('eventsBody').innerHTML = '<tr><td colspan="4" class="empty">加载失败</td></tr>';
+                document.getElementById('eventsBody').innerHTML = '<tr><td colspan="5" class="empty">加载失败</td></tr>';
             });
     }
 
     function renderTable(events) {
         var tbody = document.getElementById('eventsBody');
         if (!events.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无数据</td></tr>';
             return;
         }
         var html = '';
@@ -288,6 +300,7 @@
                 + '<td>' + e.id + '</td>'
                 + '<td><span class="type-tag ' + e.type + '">' + e.type + '</span></td>'
                 + '<td class="msg-cell" title="' + escapeHtml(e.message) + '">' + escapeHtml(e.message) + '</td>'
+                + '<td>' + escapeHtml(e.user_id || '-') + '</td>'
                 + '<td class="time-cell">' + time + '</td>'
                 + '</tr>';
         });
