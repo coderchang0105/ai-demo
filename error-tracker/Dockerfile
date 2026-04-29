@@ -3,6 +3,8 @@ FROM golang:1.26.2-alpine AS builder
 
 WORKDIR /app
 
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories  && apk add --no-cache gcc musl-dev
+
 COPY go.mod go.sum ./
 RUN go env -w GOPROXY=https://goproxy.cn,direct
 RUN go mod download
@@ -15,7 +17,7 @@ RUN CGO_ENABLED=1 go build -o server ./cmd/server
 FROM alpine:3.19
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.cloud.tencent.com/g' /etc/apk/repositories \
-    && apk add gcc musl-dev
+    && apk add --no-cache gcc musl-dev
 
 WORKDIR /app
 
